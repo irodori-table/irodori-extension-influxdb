@@ -463,7 +463,7 @@
   },
   "source": {
     "marketplaceId": "irodori.influxdb",
-    "repository": "https://github.com/hjosugi/irodori-extension-influxdb",
+    "repository": "https://github.com/irodori-table/irodori-extension-influxdb",
     "knowledgeEngineStatus": "wired",
     "adapter": "db/influx.rs",
     "adapterSha256": "f872ddef744c7ad5e9f4cee85cfba9bb364a1e81e04c1ff7d23300e1e410717c",
