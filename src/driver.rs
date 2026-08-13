@@ -343,9 +343,20 @@ impl InfluxConfig {
         )
         .or_else(|| database_from_url(&base_url))
         .unwrap_or_else(|| "default".to_string());
+        // An InfluxDB API token and an OAuth access token are both sent as a
+        // bearer token; the difference is where they came from. Accepting the
+        // OAuth name lets a profile say which it holds rather than requiring it
+        // to know they share a transport.
         let token = secret_option(
             request,
-            &["token", "apiKey", "influxToken", "bearerToken", "password"],
+            &[
+                "token",
+                "apiKey",
+                "influxToken",
+                "bearerToken",
+                "oauthAccessToken",
+                "password",
+            ],
         );
         let query_type = option_string(request, &["queryType", "language"])
             .unwrap_or_else(|| "sql".to_string())
@@ -985,5 +996,18 @@ mod tests {
         assert!(err.contains("contains no PEM certificate"), "{err}");
 
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn an_oauth_access_token_is_accepted_under_its_own_name() {
+        // Same transport as an API token, different origin — a profile should
+        // be able to say which it is holding.
+        for field in ["token", "influxToken", "oauthAccessToken", "bearerToken"] {
+            let config = InfluxConfig::from_request(&json!({
+                "profile": { "host": "influx.local", "options": { field: "tok-value" } }
+            }))
+            .expect("config");
+            assert_eq!(config.token.as_deref(), Some("tok-value"), "{field}");
+        }
     }
 }
