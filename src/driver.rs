@@ -1,3 +1,6 @@
+use irodori_connector_abi::{
+    collect_url_auth, option_bool, option_string, push_sensitive, request_containers,
+};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Mutex, OnceLock};
 
@@ -611,39 +614,6 @@ fn connection(connection_id: &str) -> Result<InfluxConnection, IrodoriConnectorB
     })
 }
 
-fn request_containers(request: &Value) -> Vec<&Value> {
-    [
-        Some(request),
-        request.get("profile"),
-        request.get("options"),
-        request.get("auth"),
-        request.get("secrets"),
-        request
-            .get("profile")
-            .and_then(|profile| profile.get("options")),
-        request
-            .get("profile")
-            .and_then(|profile| profile.get("auth")),
-        request
-            .get("profile")
-            .and_then(|profile| profile.get("secrets")),
-    ]
-    .into_iter()
-    .flatten()
-    .collect()
-}
-
-fn option_string(request: &Value, fields: &[&str]) -> Option<String> {
-    request_containers(request)
-        .into_iter()
-        .find_map(|container| {
-            fields
-                .iter()
-                .find_map(|field| nested_string(container.get(*field)?))
-        })
-        .map(str::to_string)
-}
-
 fn secret_option(request: &Value, fields: &[&str]) -> Option<String> {
     request_containers(request)
         .into_iter()
@@ -666,27 +636,6 @@ fn option_u16(request: &Value, fields: &[&str]) -> Option<u16> {
                     .and_then(|value| u16::try_from(value).ok())
             })
         })
-}
-
-fn option_bool(request: &Value, fields: &[&str]) -> Option<bool> {
-    request_containers(request)
-        .into_iter()
-        .find_map(|container| {
-            fields
-                .iter()
-                .find_map(|field| bool_value(container.get(*field)?))
-        })
-}
-
-fn nested_string(value: &Value) -> Option<&str> {
-    match value {
-        Value::String(value) => Some(value.as_str()).filter(|value| !value.trim().is_empty()),
-        Value::Object(object) => ["value", "text", "url", "uri"]
-            .iter()
-            .find_map(|field| object.get(*field).and_then(Value::as_str))
-            .filter(|value| !value.trim().is_empty()),
-        _ => None,
-    }
 }
 
 fn secret_string(value: &Value) -> Option<&str> {
@@ -712,19 +661,6 @@ fn number_value(value: &Value) -> Option<u64> {
         Value::Number(value) => value.as_u64(),
         Value::String(value) => value.trim().parse().ok(),
         Value::Object(object) => object.get("value").and_then(number_value),
-        _ => None,
-    }
-}
-
-fn bool_value(value: &Value) -> Option<bool> {
-    match value {
-        Value::Bool(value) => Some(*value),
-        Value::String(value) => match value.trim().to_ascii_lowercase().as_str() {
-            "true" | "1" | "yes" | "on" => Some(true),
-            "false" | "0" | "no" | "off" => Some(false),
-            _ => None,
-        },
-        Value::Object(object) => object.get("value").and_then(bool_value),
         _ => None,
     }
 }
@@ -770,24 +706,6 @@ fn database_from_url(url: &str) -> Option<String> {
         .map(|(_, path)| path)?;
     let database = path.trim_matches('/');
     (!database.is_empty()).then(|| database.to_string())
-}
-
-fn collect_url_auth(url: &str, redaction_values: &mut Vec<String>) {
-    let Some((_, rest)) = url.split_once("://") else {
-        return;
-    };
-    let Some((auth, _)) = rest.split_once('@') else {
-        return;
-    };
-    for value in auth.split(':') {
-        push_sensitive(redaction_values, Some(value));
-    }
-}
-
-fn push_sensitive(values: &mut Vec<String>, value: Option<&str>) {
-    if let Some(value) = value.filter(|value| !value.is_empty()) {
-        values.push(value.to_string());
-    }
 }
 
 fn url_component(value: &str) -> String {
